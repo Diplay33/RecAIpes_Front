@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Container, Row, Col, Card, Button, Modal, Form, 
   Table, Badge, Alert, ProgressBar, InputGroup,
   Dropdown, Spinner
 } from 'react-bootstrap';
 import { 
-  FaPlus, FaEdit, FaTrash, FaFilePdf, FaSync, 
+  FaPlus, FaEdit, FaTrash, FaSync, 
   FaCogs, FaSearch, FaFilter, FaMagic
 } from 'react-icons/fa';
 
@@ -20,15 +20,26 @@ const RecipeAdminApp = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingRecipe, setEditingRecipe] = useState(null);
   
-  // États pour la génération en chaîne
-  const [batchProgress, setBatchProgress] = useState(0);
-  const [batchStatus, setBatchStatus] = useState('idle'); // idle, running, completed, error
-  const [batchConfig, setBatchConfig] = useState({
-    type: 'menu',
-    theme: 'italien',
+  // États pour la génération de recettes
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [generationType, setGenerationType] = useState('single'); // single, menu, theme, custom
+  const [generating, setGenerating] = useState(false);
+  
+  // IMPORTANT: Utiliser useRef pour le formulaire afin d'éviter les re-rendus
+  const generateFormRef = useRef({
+    dishName: '',
     userName: 'admin',
+    menuTheme: 'italien',
+    themeType: 'italien',
+    themeCount: 4,
     customDishes: ''
   });
+  
+  // États pour le batch processing
+  const [batchStatus, setBatchStatus] = useState('idle'); // idle, running, completed, error
+  const [batchProgress, setBatchProgress] = useState(0);
+  const [jobId, setJobId] = useState(null);
+  const progressInterval = useRef(null); // Référence pour l'intervalle de polling
   
   // États pour les filtres
   const [filters, setFilters] = useState({
@@ -49,6 +60,15 @@ const RecipeAdminApp = () => {
   useEffect(() => {
     loadRecipes();
     loadStorageInfo();
+  }, []);
+  
+  // Nettoyage de l'intervalle lors du démontage du composant
+  useEffect(() => {
+    return () => {
+      if (progressInterval.current) {
+        clearInterval(progressInterval.current);
+      }
+    };
   }, []);
 
   // Chargement des recettes
@@ -95,34 +115,152 @@ const RecipeAdminApp = () => {
     }));
   };
 
-  // Génération en chaîne
-  const startBatchGeneration = async () => {
-    setShowBatchModal(false);
+  // Gestionnaire de changement de formulaire
+  const handleFormChange = (field, value) => {
+    generateFormRef.current = {
+      ...generateFormRef.current,
+      [field]: value
+    };
+  };
+
+  // Fonction pour vérifier le statut de la génération
+  const checkGenerationStatus = async (id) => {
+    try {
+      const response = await fetch(`/api/recipes/batch/status/${id}`);
+      
+      if (!response.ok) {
+        throw new Error('Erreur lors de la vérification du statut');
+      }
+      
+      const statusData = await response.json();
+      
+      // Mettre à jour la barre de progression avec les vraies données
+      setBatchProgress(statusData.progress || 0);
+      
+      // Mettre à jour le statut du batch
+      if (statusData.status === 'completed') {
+        setBatchStatus('completed');
+        // Arrêter le polling quand c'est terminé
+        if (progressInterval.current) {
+          clearInterval(progressInterval.current);
+          progressInterval.current = null;
+        }
+        
+        // Réinitialiser après un délai
+        setTimeout(() => {
+          setBatchStatus('idle');
+          setBatchProgress(0);
+          setGenerating(false);
+          setJobId(null);
+          loadRecipes(); // Charger les nouvelles recettes
+        }, 2000);
+      } else if (statusData.status === 'error') {
+        setBatchStatus('error');
+        setError(statusData.error || 'Erreur lors de la génération');
+        clearInterval(progressInterval.current);
+        progressInterval.current = null;
+        setGenerating(false);
+      }
+      
+      return statusData;
+    } catch (error) {
+      console.error('Erreur lors de la vérification du statut:', error);
+      // En cas d'erreur de l'API, on utilise une simulation de progression
+      return null;
+    }
+  };
+
+  // Démarrer le polling pour la progression
+  const startProgressPolling = (id) => {
+    // Arrêter tout intervalle existant
+    if (progressInterval.current) {
+      clearInterval(progressInterval.current);
+    }
+    
+    // Définir le nouvel intervalle de polling (toutes les 1.5 secondes)
+    progressInterval.current = setInterval(() => {
+      checkGenerationStatus(id);
+    }, 1500);
+  };
+
+  // Fonctions utilitaires pour la génération
+  const isGenerateConfigValid = () => {
+    const config = generateFormRef.current;
+    switch (generationType) {
+      case 'single':
+        return config.dishName.trim().length > 0;
+      case 'menu':
+        return config.menuTheme.length > 0;
+      case 'theme':
+        return config.themeType.length > 0;
+      case 'custom':
+        return config.customDishes.trim().length > 0;
+      default:
+        return false;
+    }
+  };
+
+  const getGenerateButtonText = () => {
+    const config = generateFormRef.current;
+    switch (generationType) {
+      case 'single':
+        return 'Générer la Recette';
+      case 'menu':
+        return 'Générer le Menu (3 recettes)';
+      case 'theme':
+        return `Générer ${config.themeCount} Recettes`;
+      case 'custom':
+        const dishCount = config.customDishes.split('\n').filter(d => d.trim()).length;
+        return `Générer ${dishCount} Recette${dishCount > 1 ? 's' : ''}`;
+      default:
+        return 'Générer';
+    }
+  };
+
+  // Fonction améliorée pour gérer la génération
+  const handleGenerate = async () => {
+    setGenerating(true);
+    setShowGenerateModal(false);
     setBatchStatus('running');
     setBatchProgress(0);
+    
+    const config = generateFormRef.current;
 
     try {
       let endpoint = '';
       let payload = {};
 
-      switch (batchConfig.type) {
+      switch (generationType) {
+        case 'single':
+          endpoint = '/api/recipes';
+          payload = { 
+            dishName: config.dishName, 
+            userName: config.userName 
+          };
+          break;
+          
         case 'menu':
           endpoint = '/api/recipes/batch/menu';
-          payload = { userName: batchConfig.userName, theme: batchConfig.theme };
+          payload = { 
+            userName: config.userName, 
+            theme: config.menuTheme 
+          };
           break;
+          
         case 'theme':
           endpoint = '/api/recipes/batch/theme';
           payload = { 
-            userName: batchConfig.userName, 
-            theme: batchConfig.theme, 
-            count: 4 
+            userName: config.userName, 
+            theme: config.themeType, 
+            count: config.themeCount 
           };
           break;
+          
         case 'custom':
           endpoint = '/api/recipes/batch/custom';
           payload = { 
-            userName: batchConfig.userName, 
-            dishes: batchConfig.customDishes.split('\n').filter(d => d.trim()) 
+            userName: config.userName, 
+            dishes: config.customDishes.split('\n').filter(d => d.trim()) 
           };
           break;
       }
@@ -133,34 +271,56 @@ const RecipeAdminApp = () => {
         body: JSON.stringify(payload)
       });
 
-      if (!response.ok) throw new Error('Échec génération');
-
-      // Simulation du progrès (remplacer par WebSocket en production)
-      simulateBatchProgress();
-      
-    } catch (err) {
+      if (response.ok) {
+        const result = await response.json();
+        
+        // Si le backend renvoie un ID de tâche, utiliser le polling
+        if (result.jobId) {
+          setJobId(result.jobId);
+          startProgressPolling(result.jobId);
+        } else {
+          // Sinon, utiliser la simulation
+          simulateBatchProgress(generationType === 'single' ? 2000 : 5000);
+        }
+      } else {
+        throw new Error('Échec de la génération');
+      }
+    } catch (error) {
       setBatchStatus('error');
-      setError('Erreur lors de la génération en chaîne: ' + err.message);
+      setError('Erreur lors de la génération: ' + error.message);
+      setGenerating(false);
     }
   };
 
-  // Simulation du progrès de génération
-  const simulateBatchProgress = () => {
+  // Garder la simulation comme fallback
+  const simulateBatchProgress = (duration = 4000) => {
+    setBatchStatus('running');
+    setBatchProgress(0);
+    
     let progress = 0;
-    const interval = setInterval(() => {
-      progress += 25;
-      setBatchProgress(progress);
+    const steps = generationType === 'single' ? 4 : 8;
+    const interval = duration / steps;
+    
+    if (progressInterval.current) {
+      clearInterval(progressInterval.current);
+    }
+    
+    progressInterval.current = setInterval(() => {
+      progress += (100 / steps);
+      setBatchProgress(Math.min(progress, 100));
       
       if (progress >= 100) {
-        clearInterval(interval);
+        clearInterval(progressInterval.current);
+        progressInterval.current = null;
         setBatchStatus('completed');
         setTimeout(() => {
           setBatchStatus('idle');
           setBatchProgress(0);
+          setGenerating(false);
           loadRecipes();
         }, 2000);
       }
-    }, 3000);
+    }, interval);
   };
 
   // Suppression d'une recette
@@ -178,7 +338,7 @@ const RecipeAdminApp = () => {
   // Filtrage des recettes
   const filteredRecipes = recipes.filter(recipe => {
     const matchesSearch = recipe.title.toLowerCase().includes(filters.search.toLowerCase()) ||
-                         recipe.ingredients.toLowerCase().includes(filters.search.toLowerCase());
+                         recipe.ingredients?.toLowerCase().includes(filters.search.toLowerCase());
     const matchesCategory = !filters.category || recipe.category === filters.category;
     
     return matchesSearch && matchesCategory;
@@ -242,7 +402,6 @@ const RecipeAdminApp = () => {
     </Row>
   );
 
-  // Composant Barre de Progrès Batch
   const BatchProgressBar = () => {
     if (batchStatus !== 'running') return null;
     
@@ -251,16 +410,21 @@ const RecipeAdminApp = () => {
         <Col>
           <Card>
             <Card.Body>
-              <h5>Génération en cours...</h5>
+              <h5>
+                {generationType === 'single' ? 'Génération de la recette...' : 'Génération en cours...'}
+              </h5>
               <ProgressBar 
                 now={batchProgress} 
                 animated 
                 striped 
                 variant="primary"
-                label={`${batchProgress}%`}
+                label={`${Math.round(batchProgress)}%`}
               />
               <p className="mt-2">
-                {batchProgress < 100 ? 'Génération des recettes...' : 'Terminé !'}
+                {batchProgress < 100 ? 
+                  `${getGenerateButtonText()} - ${Math.round(batchProgress)}%` : 
+                  'Terminé !'
+                }
               </p>
             </Card.Body>
           </Card>
@@ -269,71 +433,167 @@ const RecipeAdminApp = () => {
     );
   };
 
-  // Composant Modal Génération Batch
-  const BatchModal = () => (
-    <Modal show={showBatchModal} onHide={() => setShowBatchModal(false)} size="lg">
+  // Composant Modal de Génération
+  const GenerateModal = () => (
+    <Modal 
+      show={showGenerateModal} 
+      onHide={() => setShowGenerateModal(false)} 
+      size="lg"
+      backdrop="static" // Empêche la fermeture en cliquant en dehors
+    >
       <Modal.Header closeButton>
-        <Modal.Title>Génération en Chaîne</Modal.Title>
+        <Modal.Title>Générer des Recettes</Modal.Title>
       </Modal.Header>
       <Modal.Body>
-        <Form>
-          <Form.Group className="mb-3">
-            <Form.Label>Type de génération</Form.Label>
-            <Form.Select 
-              value={batchConfig.type}
-              onChange={(e) => setBatchConfig(prev => ({ ...prev, type: e.target.value }))}
-            >
-              <option value="menu">Menu complet (Entrée + Plat + Dessert)</option>
-              <option value="theme">Recettes par thème</option>
-              <option value="custom">Personnalisé</option>
-            </Form.Select>
-          </Form.Group>
-
-          {batchConfig.type === 'theme' && (
-            <Form.Group className="mb-3">
-              <Form.Label>Thème culinaire</Form.Label>
-              <Form.Select
-                value={batchConfig.theme}
-                onChange={(e) => setBatchConfig(prev => ({ ...prev, theme: e.target.value }))}
+        {/* Sélecteur de type */}
+        <Form.Group className="mb-4">
+          <Form.Label><strong>Type de génération</strong></Form.Label>
+          <div className="d-flex gap-3 flex-wrap">
+            {[
+              { key: 'single', label: 'Recette Simple', icon: '🍽️' },
+              { key: 'menu', label: 'Menu Complet', icon: '🍽️🥗🍰' },
+              { key: 'theme', label: 'Par Thème', icon: '🌍' },
+              { key: 'custom', label: 'Personnalisé', icon: '✨' }
+            ].map(type => (
+              <Button
+                key={type.key}
+                variant={generationType === type.key ? 'primary' : 'outline-primary'}
+                onClick={() => setGenerationType(type.key)}
+                className="flex-fill"
               >
-                <option value="italien">Cuisine Italienne</option>
-                <option value="français">Cuisine Française</option>
-                <option value="asiatique">Cuisine Asiatique</option>
-                <option value="méditerranéen">Cuisine Méditerranéenne</option>
-              </Form.Select>
-            </Form.Group>
-          )}
+                {type.icon} {type.label}
+              </Button>
+            ))}
+          </div>
+        </Form.Group>
 
-          {batchConfig.type === 'custom' && (
+        {/* Formulaires spécifiques selon le type */}
+        {generationType === 'single' && (
+          <div>
+            <h6>Recette Simple</h6>
             <Form.Group className="mb-3">
-              <Form.Label>Plats à générer (un par ligne)</Form.Label>
+              <Form.Label>Nom du plat</Form.Label>
               <Form.Control
-                as="textarea"
-                rows={5}
-                value={batchConfig.customDishes}
-                onChange={(e) => setBatchConfig(prev => ({ ...prev, customDishes: e.target.value }))}
-                placeholder="Exemple:&#10;Pizza margherita&#10;Pâtes carbonara&#10;Tiramisu"
+                type="text"
+                placeholder="Ex: Pizza Margherita"
+                defaultValue={generateFormRef.current.dishName}
+                onChange={(e) => handleFormChange('dishName', e.target.value)}
               />
             </Form.Group>
-          )}
+          </div>
+        )}
 
-          <Form.Group>
-            <Form.Label>Nom d'utilisateur</Form.Label>
-            <Form.Control
-              type="text"
-              value={batchConfig.userName}
-              onChange={(e) => setBatchConfig(prev => ({ ...prev, userName: e.target.value }))}
-            />
-          </Form.Group>
-        </Form>
+        {generationType === 'menu' && (
+          <div>
+            <h6>Menu Complet (Entrée + Plat + Dessert)</h6>
+            <Form.Group className="mb-3">
+              <Form.Label>Thème du menu</Form.Label>
+              <Form.Select
+                defaultValue={generateFormRef.current.menuTheme}
+                onChange={(e) => handleFormChange('menuTheme', e.target.value)}
+              >
+                <option value="italien">🇮🇹 Cuisine Italienne</option>
+                <option value="français">🇫🇷 Cuisine Française</option>
+                <option value="asiatique">🥢 Cuisine Asiatique</option>
+                <option value="méditerranéen">🌊 Cuisine Méditerranéenne</option>
+                <option value="mexicain">🌮 Cuisine Mexicaine</option>
+              </Form.Select>
+            </Form.Group>
+            <small className="text-muted">
+              Génère automatiquement une entrée, un plat principal et un dessert du thème choisi.
+            </small>
+          </div>
+        )}
+
+        {generationType === 'theme' && (
+          <div>
+            <h6>Recettes par Thème</h6>
+            <Row>
+              <Col md={8}>
+                <Form.Group className="mb-3">
+                  <Form.Label>Thème culinaire</Form.Label>
+                  <Form.Select
+                    defaultValue={generateFormRef.current.themeType}
+                    onChange={(e) => handleFormChange('themeType', e.target.value)}
+                  >
+                    <option value="italien">🇮🇹 Cuisine Italienne</option>
+                    <option value="français">🇫🇷 Cuisine Française</option>
+                    <option value="asiatique">🥢 Cuisine Asiatique</option>
+                    <option value="indien">🇮🇳 Cuisine Indienne</option>
+                    <option value="mexicain">🌮 Cuisine Mexicaine</option>
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group className="mb-3">
+                  <Form.Label>Nombre de recettes</Form.Label>
+                  <Form.Select
+                    defaultValue={generateFormRef.current.themeCount}
+                    onChange={(e) => handleFormChange('themeCount', parseInt(e.target.value))}
+                  >
+                    <option value={2}>2 recettes</option>
+                    <option value={3}>3 recettes</option>
+                    <option value={4}>4 recettes</option>
+                    <option value={5}>5 recettes</option>
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+            </Row>
+            <small className="text-muted">
+              Génère plusieurs recettes typiques du thème sélectionné.
+            </small>
+          </div>
+        )}
+
+        {generationType === 'custom' && (
+          <div>
+            <h6>Recettes Personnalisées</h6>
+            <Form.Group className="mb-3">
+              <Form.Label>Liste des plats (un par ligne)</Form.Label>
+              <Form.Control
+                as="textarea"
+                rows={6}
+                placeholder={`Exemple:\nTacos au poisson\nCrème brûlée à la vanille\nSalade César\nRisotto aux champignons`}
+                defaultValue={generateFormRef.current.customDishes}
+                onChange={(e) => handleFormChange('customDishes', e.target.value)}
+              />
+            </Form.Group>
+            <small className="text-muted">
+              Écrivez chaque plat sur une nouvelle ligne. L'IA générera une recette pour chacun.
+            </small>
+          </div>
+        )}
+
+        {/* Nom d'utilisateur */}
+        <Form.Group className="mt-4">
+          <Form.Label>Nom d'utilisateur</Form.Label>
+          <Form.Control
+            type="text"
+            defaultValue={generateFormRef.current.userName}
+            onChange={(e) => handleFormChange('userName', e.target.value)}
+          />
+        </Form.Group>
       </Modal.Body>
       <Modal.Footer>
-        <Button variant="secondary" onClick={() => setShowBatchModal(false)}>
+        <Button variant="secondary" onClick={() => setShowGenerateModal(false)}>
           Annuler
         </Button>
-        <Button variant="primary" onClick={startBatchGeneration}>
-          <FaMagic className="me-2" />
-          Démarrer la Génération
+        <Button 
+          variant="primary" 
+          onClick={handleGenerate}
+          disabled={generating || !isGenerateConfigValid()}
+        >
+          {generating ? (
+            <>
+              <Spinner size="sm" className="me-2" />
+              Génération...
+            </>
+          ) : (
+            <>
+              <FaMagic className="me-2" />
+              {getGenerateButtonText()}
+            </>
+          )}
         </Button>
       </Modal.Footer>
     </Modal>
@@ -348,10 +608,11 @@ const RecipeAdminApp = () => {
           <Button 
             variant="success" 
             className="me-2"
-            onClick={() => setShowBatchModal(true)}
+            onClick={() => setShowGenerateModal(true)}
+            disabled={generating}
           >
             <FaPlus className="me-2" />
-            Génération en Chaîne
+            {generating ? 'Génération...' : 'Générer des Recettes'}
           </Button>
           <Button variant="outline-primary" onClick={loadRecipes}>
             <FaSync className="me-2" />
@@ -433,25 +694,6 @@ const RecipeAdminApp = () => {
                   <td>
                     <Button 
                       size="sm" 
-                      variant="outline-primary" 
-                      className="me-1"
-                      onClick={() => {
-                        setEditingRecipe(recipe);
-                        setShowEditModal(true);
-                      }}
-                    >
-                      <FaEdit />
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      variant="outline-success" 
-                      className="me-1"
-                      onClick={() => window.open(recipe.pdfUrl, '_blank')}
-                    >
-                      <FaFilePdf />
-                    </Button>
-                    <Button 
-                      size="sm" 
                       variant="outline-danger"
                       onClick={() => deleteRecipe(recipe.id)}
                     >
@@ -483,7 +725,7 @@ const RecipeAdminApp = () => {
       <BatchProgressBar />
       <RecipesTable />
       
-      <BatchModal />
+      <GenerateModal />
     </Container>
   );
 };
