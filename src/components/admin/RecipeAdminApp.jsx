@@ -20,7 +20,6 @@ const RecipeAdminApp = () => {
     error: recipesError, 
     loadRecipes, 
     deleteRecipe,
-    refreshAfterGeneration 
   } = useRecipes();
 
   const [showGenerateModal, setShowGenerateModal] = useState(false);
@@ -93,7 +92,6 @@ const RecipeAdminApp = () => {
           setBatchProgress(0);
           setGenerating(false);
           setJobId(null);
-          refreshAfterGeneration();
         }, 2000);
       } else if (statusData.status === 'error') {
         setBatchStatus('error');
@@ -192,7 +190,6 @@ const RecipeAdminApp = () => {
           setBatchStatus('idle');
           setBatchProgress(0);
           setGenerating(false);
-          refreshAfterGeneration();
         }, 2000);
       }
     }, intervalTime);
