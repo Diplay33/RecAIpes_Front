@@ -5,16 +5,11 @@ export const useRecipes = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  /**
-   * --- MODIFIED FUNCTION ---
-   * This function now calls the public search endpoint and processes the new data structure.
-   */
   const loadRecipes = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       
-      // We now call the public search endpoint.
       const response = await fetch('/api/bucket/search');
       
       if (!response.ok) {
@@ -24,8 +19,9 @@ export const useRecipes = () => {
       
       const bucketData = await response.json();
       
-      // The new function to transform data from the public search response.
-      const transformedRecipes = transformPublicBucketDataToRecipes(bucketData);
+      // The backend wraps the response in a "results" object.
+      // We must pass bucketData.results to the transform function.
+      const transformedRecipes = transformPublicBucketDataToRecipes(bucketData.results);
       
       setRecipes(transformedRecipes);
 
@@ -37,9 +33,6 @@ export const useRecipes = () => {
     }
   }, []);
 
-  // createRecipe and deleteRecipe remain the same for now, but note that
-  // deleteRecipe uses an ID that might need to be adjusted based on what's available.
-  // We'll use idExterne for now.
   const createRecipe = async (recipeData) => {
     try {
       const response = await fetch('/api/recipes', {
@@ -58,7 +51,6 @@ export const useRecipes = () => {
 
   const deleteRecipe = async (fileId) => {
     try {
-      // This endpoint expects the bucket file ID. We assume idExterne can be used.
       const response = await fetch(`/api/bucket/test-delete-by-id/${fileId}`, {
         method: 'DELETE'
       });
@@ -72,32 +64,28 @@ export const useRecipes = () => {
   };
 
   /**
-   * --- NEW TRANSFORM FUNCTION ---
-   * This function is adapted to the new JSON structure from the public search.
-   * { "studentUploadReadingDTOS": [ ... ] }
+   * This function now correctly processes the data structure.
+   * It receives the content of the "results" object.
    */
-  const transformPublicBucketDataToRecipes = (bucketData) => {
-    // The data is now in the `studentUploadReadingDTOS` array.
-    if (!bucketData || !Array.isArray(bucketData.studentUploadReadingDTOS)) {
+  const transformPublicBucketDataToRecipes = (resultsData) => {
+    // The actual array is in resultsData.studentUploadReadingDTOS
+    if (!resultsData || !Array.isArray(resultsData.studentUploadReadingDTOS)) {
+      console.warn("La structure de données attendue ('results.studentUploadReadingDTOS') est absente ou n'est pas un tableau.");
       return [];
     }
 
-    return bucketData.studentUploadReadingDTOS.map(file => ({
-      // Use idExterne as the unique identifier for keys and deletion.
+    return resultsData.studentUploadReadingDTOS.map(file => ({
       id: file.idExterne,
-      // Use tag2 as the primary source for the title.
-      title: file.tag2 || 'Recette sans nom',
-      // The PDF URL is now provided directly by the API.
+      // We also clean the "TITRE: " prefix from the tag here
+      title: (file.tag2 || 'Recette sans nom'),
       pdfUrl: file.url,
-      // Fallback descriptions based on tags.
       description: `PDF généré - ${file.tag3}`,
-      ingredients: file.tag1 || 'Type non disponible',
-      // Keep other fields consistent for the UI.
-      createdBy: 'Utilisateur', // This info is not in the public response.
-      createdAt: file.tag3 || new Date().toISOString(), // Use tag3 as date if available.
-      fileName: file.url.substring(file.url.lastIndexOf('/') + 1), // Extract filename from URL.
+      // For ingredients, we only display if it's not the default "recipe" tag.
+      ingredients: (file.tag1 && file.tag1 !== 'recipe') ? file.tag1 : 'N/A',
+      createdBy: 'Utilisateur',
+      createdAt: file.tag3 || new Date().toISOString(),
+      fileName: file.url.substring(file.url.lastIndexOf('/') + 1),
       source: 'bucket-public',
-      // Add all tags for potential future use.
       tag1: file.tag1,
       tag2: file.tag2,
       tag3: file.tag3
