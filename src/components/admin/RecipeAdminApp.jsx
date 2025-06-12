@@ -10,7 +10,7 @@ import {
 } from 'react-icons/fa';
 import { useRecipes } from '../../hooks/useRecipes';
 // Import the new, separated modal component
-import GenerateModal from '..GenerateModal';
+import GenerateModal from '../GenerateModal';
 
 const RecipeAdminApp = () => {
   const { 
