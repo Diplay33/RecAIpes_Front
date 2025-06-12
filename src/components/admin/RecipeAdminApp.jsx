@@ -11,7 +11,7 @@ import {
   FaCogs, FaSearch, FaMagic, FaFilePdf
 } from 'react-icons/fa';
 import { useRecipes } from '../../hooks/useRecipes';
-import GenerateModal from './GenerateModal';
+import GenerateModal from '../GenerateModal';
 
 const RecipeAdminApp = () => {
   const { 
