@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Container, Row, Col, Card, Button,
+  // 'Form' has been added to the import list to fix the error.
+  Form, 
   Table, Alert, ProgressBar, InputGroup,
   Spinner
 } from 'react-bootstrap';
@@ -9,8 +11,7 @@ import {
   FaCogs, FaSearch, FaMagic, FaFilePdf
 } from 'react-icons/fa';
 import { useRecipes } from '../../hooks/useRecipes';
-// Import the new, separated modal component
-import GenerateModal from '../GenerateModal';
+import GenerateModal from './GenerateModal';
 
 const RecipeAdminApp = () => {
   const { 
@@ -22,13 +23,9 @@ const RecipeAdminApp = () => {
     refreshAfterGeneration 
   } = useRecipes();
 
-  // The main component only needs to know if the modal should be shown,
-  // and if a generation process is running.
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState(null);
-  
-  // All form-related state has been moved to GenerateModal.jsx
   
   const [batchStatus, setBatchStatus] = useState('idle');
   const [batchProgress, setBatchProgress] = useState(0);
@@ -120,12 +117,6 @@ const RecipeAdminApp = () => {
     progressInterval.current = setInterval(() => checkGenerationStatus(id), 1500);
   };
 
-  /**
-   * This function now receives the form data directly from the modal component.
-   * @param {object} generationConfig - The configuration from the modal.
-   * @param {string} generationConfig.type - The type of generation (single, menu, etc.).
-   * @param {object} generationConfig.data - The form values.
-   */
   const handleGenerate = async ({ type, data }) => {
     setGenerating(true);
     setShowGenerateModal(false);
@@ -182,17 +173,15 @@ const RecipeAdminApp = () => {
   };
 
   const simulateBatchProgress = (duration = 4000) => {
-    // This function remains the same, but it's good practice to keep it
-    // in the component that manages the progress bar state.
     setBatchStatus('running');
     setBatchProgress(0);
     let progress = 0;
-    const intervalTime = duration / 8; // generic steps
+    const intervalTime = duration / 8;
     
     if (progressInterval.current) clearInterval(progressInterval.current);
     
     progressInterval.current = setInterval(() => {
-      progress += 12.5; // 100 / 8 steps
+      progress += 12.5;
       setBatchProgress(Math.min(progress, 100));
       
       if (progress >= 100) {
@@ -232,76 +221,47 @@ const RecipeAdminApp = () => {
     return filters.sortOrder === 'desc' ? new Date(bVal) - new Date(aVal) : new Date(aVal) - new Date(bVal);
   });
 
-  // The components below are unchanged, but they are now cleaner as they don't live
-  // next to a giant modal definition.
-  const StatsCards = () => ( /* ... JSX unchanged ... */ <Row className="mb-4">
+  const StatsCards = () => (
+    <Row className="mb-4">
       <Col md={3}>
         <Card className="bg-primary text-white">
-          <Card.Body>
-            <div className="d-flex justify-content-between">
-              <div>
-                <h4>{stats.total}</h4>
-                <p>PDFs Bucket</p>
-              </div>
-              <FaFilePdf size={32} />
-            </div>
-          </Card.Body>
+          <Card.Body><div className="d-flex justify-content-between"><div><h4>{stats.total}</h4><p>PDFs Bucket</p></div><FaFilePdf size={32} /></div></Card.Body>
         </Card>
       </Col>
       <Col md={3}>
         <Card className="bg-success text-white">
-          <Card.Body>
-            <div className="d-flex justify-content-between">
-              <div>
-                <h4>{stats.today}</h4>
-                <p>Aujourd'hui</p>
-              </div>
-              <FaPlus size={32} />
-            </div>
-          </Card.Body>
+          <Card.Body><div className="d-flex justify-content-between"><div><h4>{stats.today}</h4><p>Aujourd'hui</p></div><FaPlus size={32} /></div></Card.Body>
         </Card>
       </Col>
       <Col md={3}>
         <Card className="bg-info text-white">
-          <Card.Body>
-            <div className="d-flex justify-content-between">
-              <div>
-                <h4>{stats.storageType}</h4>
-                <p>Stockage</p>
-              </div>
-              <FaCogs size={32} />
-            </div>
-          </Card.Body>
+          <Card.Body><div className="d-flex justify-content-between"><div><h4>{stats.storageType}</h4><p>Stockage</p></div><FaCogs size={32} /></div></Card.Body>
         </Card>
       </Col>
       <Col md={3}>
         <Card className="bg-warning text-white">
+          <Card.Body><div className="d-flex justify-content-between"><div><h4>{batchStatus === 'running' ? 'En cours' : 'Prêt'}</h4><p>Génération</p></div><FaMagic size={32} /></div></Card.Body>
+        </Card>
+      </Col>
+    </Row>
+  );
+
+  const BatchProgressBar = () => (batchStatus !== 'running') ? null : (
+    <Row className="mb-4">
+      <Col>
+        <Card>
           <Card.Body>
-            <div className="d-flex justify-content-between">
-              <div>
-                <h4>{batchStatus === 'running' ? 'En cours' : 'Prêt'}</h4>
-                <p>Génération</p>
-              </div>
-              <FaMagic size={32} />
-            </div>
+            <h5>Génération en cours...</h5>
+            <ProgressBar now={batchProgress} animated striped variant="primary" label={`${Math.round(batchProgress)}%`} />
+            <p className="mt-2">{batchProgress < 100 ? `Progression - ${Math.round(batchProgress)}%` : 'Terminé ! Rafraîchissement...'}</p>
           </Card.Body>
         </Card>
       </Col>
-    </Row>);
-  const BatchProgressBar = () => ( /* ... JSX unchanged ... */  (batchStatus !== 'running') ? null : (
-      <Row className="mb-4">
-        <Col>
-          <Card>
-            <Card.Body>
-              <h5>Génération en cours...</h5>
-              <ProgressBar now={batchProgress} animated striped variant="primary" label={`${Math.round(batchProgress)}%`}/>
-              <p className="mt-2">{batchProgress < 100 ? `Progression - ${Math.round(batchProgress)}%` : 'Terminé ! Rafraîchissement...'}</p>
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
-    ));
-  const RecipesTable = () => ( /* ... JSX unchanged ... */ <Card>
+    </Row>
+  );
+
+  const RecipesTable = () => (
+    <Card>
       <Card.Header className="d-flex justify-content-between align-items-center">
         <h5>PDFs Recettes (Bucket Externe)</h5>
         <div>
@@ -316,7 +276,7 @@ const RecipeAdminApp = () => {
         <Row className="mb-3">
           <Col md={8}>
             <InputGroup>
-              <Form.Control placeholder="Rechercher..." value={filters.search} onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}/>
+              <Form.Control placeholder="Rechercher..." value={filters.search} onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))} />
               <Button variant="outline-secondary"><FaSearch /></Button>
             </InputGroup>
           </Col>
@@ -351,7 +311,8 @@ const RecipeAdminApp = () => {
           </Table>
         )}
       </Card.Body>
-    </Card>);
+    </Card>
+  );
 
   return (
     <Container fluid>
@@ -369,7 +330,6 @@ const RecipeAdminApp = () => {
       <BatchProgressBar />
       <RecipesTable />
       
-      {/* The modal is now rendered here. It's a clean, single line. */}
       <GenerateModal 
         show={showGenerateModal}
         onHide={() => setShowGenerateModal(false)}
