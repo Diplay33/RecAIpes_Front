@@ -10,7 +10,12 @@ export const useRecipes = () => {
       setLoading(true);
       setError(null);
       
-      const response = await fetch('/api/bucket/search');
+      const response = await fetch('/api/bucket/search', {
+      method: 'GET',
+      headers: {
+        'X-API-Key': process.env.REACT_APP_API_KEY
+      }
+    });
       
       if (!response.ok) {
         const errorBody = await response.text();
