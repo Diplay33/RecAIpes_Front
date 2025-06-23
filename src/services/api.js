@@ -12,7 +12,7 @@ const api = axios.create({
 
 api.interceptors.request.use(
   (config) => {
-    const apiKey = process.env.API_SECRET_KEY;
+    const apiKey = process.env.REACT_APP_API_KEY;
     if (apiKey) {
       config.headers['X-API-Key'] = apiKey;
     }
