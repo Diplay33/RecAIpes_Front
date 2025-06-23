@@ -148,7 +148,10 @@ const RecipeAdminApp = () => {
 
       const response = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-API-Key': process.env.REACT_APP_API_KEY
+         },
         body: JSON.stringify(payload)
       });
 

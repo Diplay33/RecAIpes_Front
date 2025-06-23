@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080/api';
+const BUCKET_BASE_URL = process.env.REACT_APP_BUCKET_URL || 'http://141.94.115.201';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -8,6 +9,20 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+api.interceptors.request.use(
+  (config) => {
+    const apiKey = process.env.REACT_APP_API_KEY;
+    if (apiKey) {
+      config.headers['X-API-Key'] = apiKey;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 
 // Intercepteurs pour gestion d'erreurs
 api.interceptors.response.use(

@@ -37,7 +37,10 @@ export const useRecipes = () => {
     try {
       const response = await fetch('/api/recipes', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-API-Key': process.env.REACT_APP_API_KEY
+        },
         body: JSON.stringify(recipeData)
       });
       if (!response.ok) {
@@ -52,7 +55,10 @@ export const useRecipes = () => {
   const deleteRecipe = async (fileId) => {
     try {
       const response = await fetch(`/api/bucket/test-delete-by-id/${fileId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          'X-API-Key': process.env.REACT_APP_API_KEY
+        }
       });
       if (!response.ok) {
         throw new Error('Erreur lors de la suppression');
@@ -63,10 +69,6 @@ export const useRecipes = () => {
     }
   };
 
-  /**
-   * This function now correctly processes the data structure.
-   * It receives the content of the "results" object.
-   */
   const transformPublicBucketDataToRecipes = (resultsData) => {
     // The actual array is in resultsData.studentUploadReadingDTOS
     if (!resultsData || !Array.isArray(resultsData.studentUploadReadingDTOS)) {
