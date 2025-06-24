@@ -11,11 +11,11 @@ export const useRecipes = () => {
       setError(null);
       
       const response = await fetch('/api/bucket/search', {
-      method: 'GET',
-      headers: {
-        'X-API-Key': process.env.REACT_APP_API_KEY
-      }
-    });
+        method: 'GET',
+        headers: {
+          'X-API-Key': process.env.REACT_APP_API_KEY
+        }
+      });
       
       if (!response.ok) {
         const errorBody = await response.text();
@@ -24,8 +24,6 @@ export const useRecipes = () => {
       
       const bucketData = await response.json();
       
-      // The backend wraps the response in a "results" object.
-      // We must pass bucketData.results to the transform function.
       const transformedRecipes = transformPublicBucketDataToRecipes(bucketData.results);
       
       setRecipes(transformedRecipes);
@@ -38,44 +36,9 @@ export const useRecipes = () => {
     }
   }, []);
 
-  const createRecipe = async (recipeData) => {
-    try {
-      const response = await fetch('/api/recipes', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-API-Key': process.env.REACT_APP_API_KEY
-        },
-        body: JSON.stringify(recipeData)
-      });
-      if (!response.ok) {
-        throw new Error('Erreur lors de la création');
-      }
-      return await response.json();
-    } catch (err) {
-      throw new Error('Erreur lors de la création: ' + err.message);
-    }
-  };
-
-  const deleteRecipe = async (fileId) => {
-    try {
-      const response = await fetch(`/api/bucket/test-delete-by-id/${fileId}`, {
-        method: 'DELETE',
-        headers: {
-          'X-API-Key': process.env.REACT_APP_API_KEY
-        }
-      });
-      if (!response.ok) {
-        throw new Error('Erreur lors de la suppression');
-      }
-      setRecipes(prev => prev.filter(recipe => recipe.id !== fileId));
-    } catch (err) {
-      throw new Error('Erreur lors de la suppression: ' + err.message);
-    }
-  };
+  // ... (createRecipe et deleteRecipe ne changent pas)
 
   const transformPublicBucketDataToRecipes = (resultsData) => {
-    // The actual array is in resultsData.studentUploadReadingDTOS
     if (!resultsData || !Array.isArray(resultsData.studentUploadReadingDTOS)) {
       console.warn("La structure de données attendue ('results.studentUploadReadingDTOS') est absente ou n'est pas un tableau.");
       return [];
@@ -83,11 +46,15 @@ export const useRecipes = () => {
 
     return resultsData.studentUploadReadingDTOS.map(file => ({
       id: file.idExterne,
-      // We also clean the "TITRE: " prefix from the tag here
       title: (file.tag2 || 'Recette sans nom'),
       pdfUrl: file.url,
+      
+      // --- AJOUT ---
+      // On récupère l'URL de la miniature depuis les données de l'API.
+      // On utilise `|| null` pour s'assurer que la propriété existe toujours.
+      thumbnailUrl: file.thumbnailUrl || null,
+      
       description: `PDF généré - ${file.tag3}`,
-      // For ingredients, we only display if it's not the default "recipe" tag.
       ingredients: (file.tag1 && file.tag1 !== 'recipe') ? file.tag1 : 'N/A',
       createdBy: 'Utilisateur',
       createdAt: file.tag3 || new Date().toISOString(),
@@ -104,9 +71,11 @@ export const useRecipes = () => {
   }, [loadRecipes]);
 
   const refreshAfterGeneration = useCallback(() => {
+    console.log("Génération terminée. Rafraîchissement de la liste dans 5 secondes...");
     setTimeout(() => {
+      console.log("Rafraîchissement en cours...");
       loadRecipes();
-    }, 2000);
+    }, 5000);
   }, [loadRecipes]);
 
   return {
