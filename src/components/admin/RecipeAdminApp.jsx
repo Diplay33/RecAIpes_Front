@@ -120,6 +120,7 @@ const RecipeAdminApp = () => {
     setShowGenerateModal(false);
     setBatchStatus('running');
     setBatchProgress(0);
+    setError(null);
 
     try {
       let endpoint = '';
@@ -155,20 +156,25 @@ const RecipeAdminApp = () => {
         body: JSON.stringify(payload)
       });
 
-      if (response.ok) {
-        const result = await response.json();
-        if (result.jobId) {
-          setJobId(result.jobId);
-          startProgressPolling(result.jobId);
-        } else {
-          simulateBatchProgress(type === 'single' ? 3000 : 6000);
-        }
-      } else {
-        throw new Error('Échec de la génération');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => {
+          return { message: `Le serveur a répondu avec une erreur ${response.status}.` };
+        });
+        throw new Error(errorData.message || 'Une erreur inconnue est survenue.');
       }
+
+      const result = await response.json();
+      
+      if (result.jobId) {
+        startProgressPolling(result.jobId);
+      } else {
+        simulateBatchProgress();
+      }
+
     } catch (error) {
+      console.error("Detailed error caught:", error);
       setBatchStatus('error');
-      setError('Erreur lors de la génération: ' + error.message);
+      setError(error.message);
       setGenerating(false);
     }
   };
