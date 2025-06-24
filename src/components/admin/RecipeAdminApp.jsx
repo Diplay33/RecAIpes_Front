@@ -264,23 +264,48 @@ const RecipeAdminApp = () => {
     <Card>
       <Card.Header className="d-flex justify-content-between align-items-center">
         <h5>PDFs Recettes (Bucket Externe)</h5>
-        {/* ... (boutons) */}
+        {/* --- CORRECTION : Le bloc de boutons a été restauré ici --- */}
+        <div>
+          <Button 
+            variant="success" 
+            className="me-2"
+            onClick={() => setShowGenerateModal(true)}
+            disabled={generating}
+          >
+            <FaPlus className="me-2" />
+            {generating ? 'Génération...' : 'Générer des Recettes'}
+          </Button>
+          <Button variant="outline-primary" onClick={loadRecipes} disabled={loading}>
+            {loading ? <Spinner as="span" size="sm" animation="border" /> : <FaSync />}
+            <span className="ms-2">Rafraîchir Bucket</span>
+          </Button>
+        </div>
       </Card.Header>
       <Card.Body>
-        {/* ... (filtres) */}
-
+        <Row className="mb-3">
+          <Col md={8}>
+            <InputGroup>
+              <Form.Control placeholder="Rechercher par titre ou nom de fichier..." value={filters.search} onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))} />
+              <Button variant="outline-secondary"><FaSearch /></Button>
+            </InputGroup>
+          </Col>
+          <Col md={4}>
+            <Form.Select value={filters.sortOrder} onChange={(e) => setFilters(prev => ({ ...prev, sortOrder: e.target.value }))}>
+              <option value="desc">Plus récent en premier</option>
+              <option value="asc">Plus ancien en premier</option>
+            </Form.Select>
+          </Col>
+        </Row>
         {loading ? (
           <div className="text-center p-4"><Spinner animation="border" variant="primary" /><p className="mt-2">Chargement du bucket...</p></div>
         ) : (
           <Table responsive hover>
             <thead>
               <tr>
-                {/* --- AJOUT : Nouvelle colonne pour la miniature --- */}
                 <th>Miniature</th>
                 <th>PDF</th>
                 <th>Titre</th>
-                <th>Ingrédients</th>
-                <th>Créé par</th>
+                <th>Tags</th>
                 <th>Date</th>
                 <th>Actions</th>
               </tr>
@@ -289,13 +314,8 @@ const RecipeAdminApp = () => {
               {sortedRecipes.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="text-center p-4">
-                    <p>Aucune recette trouvée sur le bucket.</p>
-                    <Button 
-                      variant="primary" 
-                      onClick={() => setShowGenerateModal(true)}
-                    >
-                      Générer votre première recette
-                    </Button>
+                    <p>Aucune recette trouvée.</p>
+                    <Button variant="primary" onClick={() => setShowGenerateModal(true)}>Générer votre première recette</Button>
                   </td>
                 </tr>
               ) : (
@@ -304,64 +324,19 @@ const RecipeAdminApp = () => {
                     <td>
                       {recipe.thumbnailUrl ? (
                         <a href={recipe.pdfUrl} target="_blank" rel="noopener noreferrer">
-                          <img
-                            src={recipe.thumbnailUrl}
-                            alt={`Miniature de ${recipe.title}`}
-                            style={{ 
-                              width: '80px', 
-                              height: '50px', 
-                              objectFit: 'cover', 
-                              borderRadius: '4px',
-                              border: '1px solid #dee2e6'
-                            }}
-                          />
+                          <img src={recipe.thumbnailUrl} alt={`Miniature de ${recipe.title}`} style={{ width: '80px', height: '50px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #dee2e6' }} />
                         </a>
                       ) : (
-                        <div style={{ 
-                          width: '80px', 
-                          height: '50px', 
-                          backgroundColor: '#f0f0f0', 
-                          borderRadius: '4px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}>
+                        <div style={{ width: '80px', height: '50px', backgroundColor: '#f0f0f0', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <small className="text-muted">N/A</small>
                         </div>
                       )}
                     </td>
-                    <td>
-                      <a 
-                        href={recipe.pdfUrl} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-decoration-none"
-                      >
-                        <FaFilePdf size={32} className="text-danger" />
-                      </a>
-                    </td>
-                    <td>
-                      <strong>{recipe.title}</strong>
-                      <br />
-                      <small className="text-muted">
-                        {recipe.fileName}
-                      </small>
-                    </td>
-                    <td>
-                      <small>{recipe.ingredients}</small>
-                    </td>
-                    <td>{recipe.createdBy}</td>
+                    <td><a href={recipe.pdfUrl} target="_blank" rel="noopener noreferrer" className="text-decoration-none"><FaFilePdf size={32} className="text-danger" /></a></td>
+                    <td><strong>{recipe.title}</strong><br /><small className="text-muted">{recipe.fileName}</small></td>
+                    <td><small>{recipe.tag1}</small></td>
                     <td>{new Date(recipe.createdAt).toLocaleDateString()}</td>
-                    <td>
-                      <Button 
-                        size="sm" 
-                        variant="outline-danger"
-                        onClick={() => handleDeleteRecipe(recipe.id, recipe.title)}
-                        title="Supprimer du bucket"
-                      >
-                        <FaTrash />
-                      </Button>
-                    </td>
+                    <td><Button size="sm" variant="outline-danger" onClick={() => handleDeleteRecipe(recipe.id, recipe.title)} title="Supprimer du bucket"><FaTrash /></Button></td>
                   </tr>
                 ))
               )}
