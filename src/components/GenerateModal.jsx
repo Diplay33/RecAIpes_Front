@@ -90,7 +90,6 @@ const GenerateModal = ({ show, onHide, onGenerate, isGenerating }) => {
           </div>
         </Form.Group>
 
-        {/* The forms now use the local `formValues` state and `handleFormChange` handler */}
         {generationType === 'single' && (
           <div>
             <h6>Recette Simple → PDF Bucket</h6>
@@ -182,14 +181,6 @@ const GenerateModal = ({ show, onHide, onGenerate, isGenerating }) => {
           </div>
         )}
         
-        <Form.Group className="mt-4">
-          <Form.Label>Nom d'utilisateur</Form.Label>
-          <Form.Control
-            type="text"
-            value={formValues.userName}
-            onChange={(e) => handleFormChange('userName', e.target.value)}
-          />
-        </Form.Group>
       </Modal.Body>
       <Modal.Footer>
         <Button variant="secondary" onClick={onHide} disabled={isGenerating}>
